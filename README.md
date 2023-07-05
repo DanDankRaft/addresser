@@ -17,9 +17,13 @@ Addresser works on Excel for Windows, Excel for Mac, and Excel on the Web. Addre
 ## Installation
 TODO
 
-## Usage
-After installing the add-in, the functions can be called in Excel through regular formulas. All Addresser functions start with the prefix `ADDRESSER`.
+### Compiling on your own machine
+1. Download the source code
+2. install all the required packages
+3. run `npm run start:desktop` to run on a local installation of Excel, or `npm run start:web -- --document [DOCUMENT URL HERE]` to test on Excel for the web.
 
+## Usage
+After installing the add-in, the functions can be called in Excel through regular formulas. All Addresser functions start with the prefix `ADDRESSER`.  
 Add-in settings can be changed through the taskpane. Go to Add-ins -> Addresser -> Show Taskpane.
 
 ## Functions

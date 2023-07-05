@@ -1,70 +1,68 @@
-﻿var address_components_cache = localStorage.getItem("ADDRESSER_address_components_cache") != null ? JSON.parse(localStorage.getItem("ADDRESSER_address_components_cache")) : {};
+﻿var location_components_cache = localStorage.getItem("ADDRESSER_location_components_cache") != null ? JSON.parse(localStorage.getItem("ADDRESSER_location_components_cache")) : {};
 var place_id_cache = localStorage.getItem("ADDRESSER_place_id_cache") != null ? JSON.parse(localStorage.getItem("ADDRESSER_place_id_cache")) : {};
-
-
+setInterval(() => {
+  localStorage.setItem("ADDRESSER_place_id_cache", JSON.stringify(place_id_cache));
+  localStorage.setItem("ADDRESSER_location_components_cache", JSON.stringify(location_components_cache));
+}, 5000);
 
 const api_url = 'https://nominatim.openstreetmap.org';
 const northTexas = {x1: -97.596799, y1: 32.432177, x2: -96.136319, y2: 33.672544 };
 
-/**
- * Gets an address's component (city, county, zip code etc). Tries the local cache, then Nominatim call if that fails.
- * @param {string} address the address to search for
- * @param {string} component the name of the component type in Nominatim formatting.
- * @returns the value of the address component. NOT FOUND if the address is not found.
- */
-function get_address_component(address, component) {
-  //if the address is already in cache, make sure to find it and add it!
-  if(address in place_id_cache) {
-    return Promise.resolve(address_components_cache[place_id_cache[address]][component]);
+function save_to_database(address, json) {
+  if(address in place_id_cache === false)
+  {
+    place_id_cache[address] = json.place_id;
   }
 
-  return new Promise((resolve, reject) => {
-    fetch(`${api_url}?q=${address}&addressdetails=1&format=json&limit=1&viewbox=${[northTexas.x1,northTexas.y1,northTexas.x2,northTexas.y2].join(',')}`)
-      .then(response => {
-        return response.json();
-      })
-      .then(response => {
-        if(response.length > 0) {
-          let place_id = response[0].place_id;
-          place_id_cache[address] = place_id;
-          address_components_cache[place_id] = response[0].address;
-          return resolve(response[0].address[component]);
-        }
-      
-        return resolve('NOT FOUND');
-      });
-  });
+  if(json.place_id in location_components_cache === false)
+  {
+    location_components_cache[json.place_id] = json;
+  }
+
+  return Promise.resolve(json);
 }
 
 /**
- * @customfunction CITY
+ * Returns the first search query result for a given address
+ * @param {string} address
+ * @returns the result object. see https://nominatim.org/release-docs/develop/api/Output/#json
+ */
+function get_location_details(address) {
+  //STEP 1: if the address is already in the database, return that!
+  if(address in place_id_cache)
+    return Promise.resolve(location_components_cache[place_id_cache[address]]);
+
+  //STEP 2: if that fails, make an API call!
+  return fetch(`${api_url}?q=${address}&addressdetails=1&format=json&limit=1&viewbox=${[northTexas.x1,northTexas.y1,northTexas.x2,northTexas.y2].join(',')}`)
+    .then(res => res.json())
+    .then(json => save_to_database(address, json[0]));
+}
+
+/**
+ * @customfunction GETCITY
  * @param {string[][][]} address_parts the address to search with
  * @returns {string} the city where the address is located
  */
 export function get_city(address_parts) {
   let address = address_parts.flat().join(', ');
-  return new Promise((resolve, reject) => {
-    get_address_component(address, 'city')
-      .then(response => {
-        resolve(response);
-      })
-  });
+  return get_location_details(address)
+    .then(res => res['address']['city'])
+    .catch(err => 'NOT FOUND');
 }
 
 /**
  * Checks if an address contains a city name from a list, then checks OpenStreetMaps if that fails
- * @customfunction CITYFROMLIST
+ * @customfunction GETCITYFROMLIST
  * @param {string[][]} list 
  * @param {string[][][]} address_parts
  * @returns {string} city where the address is located!
  */
 export function get_city_from_list(list, address_parts) {
-  let address = address_parts.flat().join(', ').toLowerCase();
+  let address = address_parts.flat().join(', ');
   let citylist = list.flat();
-  for(let x in citylist) {
-    if(citylist[x] != "" && address.includes(citylist[x].toLowerCase())) {
-      return citylist[x];
-    }
+  for(let city of citylist) {
+    if(city != "" && address.toLowerCase().includes(city.toLowerCase()))
+      return city;
   }
 
   return get_city(address);
@@ -72,37 +70,89 @@ export function get_city_from_list(list, address_parts) {
 
 /** 
  * Finds an address's county in OpenStreetMaps
- * @customfunction COUNTY
+ * @customfunction GETCOUNTY
  * @param {string[][][]} address_parts address to search for
  * @returns {string} county where the address is located
  */
 export function get_county(address_parts) {
   let address = address_parts.flat().join(', ');
-  return new Promise((resolve, reject) => {
-    get_address_component(address, 'county')
-      .then(response => {
-        resolve(response.replace(" County", ""));
-      })
-  });
+  return get_location_details(address)
+    .then(res => res['address']['county'])
+    .catch(err => 'NOT FOUND');
 }
 
 /**
  * Checks if an address contains a county name from a list, then checks OpenStreetMaps if that fails
- * @customfunction COUNTYFROMLIST
+ * @customfunction GETCOUNTYFROMLIST
  * @param {string[][]} list 
  * @param {string[][][]} address_parts
  * @returns {string} city where the address is located!
  */
 export function get_county_from_list(list, address_parts) {
-  let address = address_parts.flat().join(', ').toLowerCase();
-  let citylist = list.flat();
-  for(let x in citylist) {
-    if(citylist[x] != "" && address.includes(citylist[x].toLowerCase())) {
-      return citylist[x];
-    }
+  let address = address_parts.flat().join(', ');
+  let countylist = list.flat();
+  for(let county of countylist) {
+    if(county != "" && address.toLowerCase().includes(county.toLowerCase()))
+      return county;
   }
 
   return get_county(address);
+}
+
+/**
+ * @customfunction GETTYPE
+ * @param {string[][][]} address_parts address
+ * @returns {string} the location's type
+ */
+export function get_type(address_parts) {
+  let address = address_parts.flat().join(', ');
+  return get_location_details(address)
+    .then(res => res['type'])
+    .catch(err => 'NOT FOUND');
+}
+
+/**
+ * @customfunction LAT
+ * @param {string[][][]} address_parts the address to search with
+ * @returns {number} the lattitude of the address
+ */
+export function get_lat(address_parts) {
+  let address = address_parts.flat().join(', ');
+  return get_location_details(address)
+    .then(res => res['lat'])
+    .catch(err => "NOT FOUND");
+}
+
+/**
+ * this is an alias of ADDRESSER.LAT
+ * @customfunction LATTITUDE
+ * @param {string[][][]} address_parts the address to search with
+ * @returns {number} the lattitude of the address
+ */
+export function get_lattitude(address_parts) {
+  return get_lat(address_parts);
+}
+
+/**
+ * @customfunction LON
+ * @param {string[][][]} address_parts the address to search with
+ * @returns {number} the longitude of the address
+ */
+export function get_lon(address_parts) {
+  let address = address_parts.flat().join(', ');
+  return get_location_details(address)
+    .then(res => res['lon'])
+    .catch(err => "NOT FOUND");
+}
+
+/**
+ * this is an alias of ADDRESSER.LON
+ * @customfunction LONGITUDE
+ * @param {string[][][]} address_parts the address to search with
+ * @returns {number} the longitude of the address
+ */
+export function get_longitude(address_parts) {
+  return get_lon(address_parts);
 }
 
 /**
@@ -119,20 +169,4 @@ export function fallback(inputs) {
     }
   }
   return list[list.length - 1];
-}
-
-let uniqueIDs = localStorage.getItem("ADDRESSER_ride_id_cache") != null ? JSON.parse(localStorage.getItem("ADDRESSER_ride_id_cache")) : [];
-
-/**
- * @customfunction CREATE_ID
- * @param dateID
- * @param name
- */
-export function createID(dateID, name) {
-  let id = dateID.toString() + name;
-  if(uniqueIDs.indexOf(id) > -1) {
-    return uniqueIDs.indexOf(id) + 1;
-  }
-
-  return uniqueIDs.push(id);
 }

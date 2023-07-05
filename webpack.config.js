@@ -7,9 +7,10 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 const path = require("path");
 
 const urlDev = "https://localhost:3000/";
-const urlProd = "https://www.contoso.com/"; // CHANGE THIS TO YOUR PRODUCTION DEPLOYMENT LOCATION
+const urlProd = "https://www.contoso.com/"; // TODO: CHANGE THIS TO YOUR PRODUCTION DEPLOYMENT LOCATION
 
 /* global require, module, process, __dirname */
+
 
 async function getHttpsOptions() {
   const httpsOptions = await devCerts.getHttpsServerOptions();
@@ -17,6 +18,8 @@ async function getHttpsOptions() {
 }
 
 module.exports = async (env, options) => {
+  const {globby} = await import('globby');
+  let functionsPaths = await globby("./src/functions/*.js");
   const dev = options.mode === "development";
   const config = {
     devtool: "source-map",
@@ -24,7 +27,7 @@ module.exports = async (env, options) => {
       polyfill: ["core-js/stable", "regenerator-runtime/runtime"],
       taskpane: ["./src/taskpane/taskpane.js", "./src/taskpane/taskpane.html"],
       commands: "./src/commands/commands.js",
-      functions: "./src/functions/functions.js",
+      functions: functionsPaths,
     },
     output: {
       clean: true,
@@ -61,7 +64,7 @@ module.exports = async (env, options) => {
     plugins: [
       new CustomFunctionsMetadataPlugin({
         output: "functions.json",
-        input: "./src/functions/functions.js",
+        input: functionsPaths,
       }),
       new HtmlWebpackPlugin({
         filename: "taskpane.html",
